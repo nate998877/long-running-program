@@ -29,27 +29,6 @@ logging.basicConfig(filename="watcher.log", level=logging.DEBUG,
 
 
 
-
-class ProgramKilled(Exception):
-    pass
-
-
-def foo():
-    print(time.ctime())
-
-
-def signal_handler(signum, frame):
-    raise ProgramKilled
-
-    # def stop(self):
-    #     self.stopped.set()
-    #     self.join()
-
-    # def run(self):
-    #     while not self.stopped.wait(self.interval.total_seconds()):
-    #         self.execute(*self.args, **self.kwargs)
-
-
 def init_parser():
     p = argparse.ArgumentParser(
         description='Monitor a directory and log changes to monitored files')
@@ -120,20 +99,6 @@ def main():
 
         exit.wait(polling_interval)
 
-    # final exit point happens here
-    # Log a message that we are shutting down
-    # Include the overall uptime since program start.
-
-#     job = Job(interval=timedelta(seconds=WAIT_TIME_SECONDS), execute=foo)
-#     job.start()
-
-#     while True:
-#         try:
-#             time.sleep(1)
-#         except ProgramKilled:
-#             print("Program killed: running cleanup code")
-#             job.stop()
-#             break
 
 
 if __name__ == "__main__":
