@@ -1,29 +1,33 @@
 #!/usr/bin/env python3
-import threading
 import time
+from threading import Event
 import signal
 import asyncio
 import argparse
 import os
 import logging
 
-from datetime import timedelta
 
 """
 DONE: implement cmd line args {watchDir:dir, magicStr:str} (argparse)
-TODO: implement Timed loop to monitor watchDir (threading + time)
-TODO: implement signal handling (signal)
-TODO: implement file cacheing (dict)
-TODO: implement async dir searching (asyncio)
-TODO: implement logger
-TODO: implement logging for file remove/add/magic string
+DONE: implement signal handling (signal)
+DONE: implement Timed loop to monitor watchDir (threading + time)
+DONE: implement file cacheing (dict)
+DONEish: implement logging
 TODO: implement graceful exit
+TODO: implement async dir searching (asyncio)
+TODO: implement logging for file remove/add/magic string
 """
 
 
 exit_flag = False
 WAIT_TIME_SECONDS = 1
-FileDict = {}
+filedict = {}
+exit = Event()
+logging.basicConfig(filename="watcher.log", level=logging.DEBUG,
+                    format='%(levelname)s : %(asctime)s - %(message)s')
+
+
 
 
 class ProgramKilled(Exception):
@@ -37,34 +41,22 @@ def foo():
 def signal_handler(signum, frame):
     raise ProgramKilled
 
+    # def stop(self):
+    #     self.stopped.set()
+    #     self.join()
 
-class Job(threading.Thread):
-    def __init__(self, interval, execute, *args, **kwargs):
-        threading.Thread.__init__(self)
-        self.daemon = False
-        self.stopped = threading.Event()
-        self.interval = interval
-        self.execute = execute
-        self.args = args
-        self.kwargs = kwargs
-
-    def stop(self):
-        self.stopped.set()
-        self.join()
-
-    def run(self):
-        while not self.stopped.wait(self.interval.total_seconds()):
-            self.execute(*self.args, **self.kwargs)
-
+    # def run(self):
+    #     while not self.stopped.wait(self.interval.total_seconds()):
+    #         self.execute(*self.args, **self.kwargs)
 
 
 def init_parser():
     p = argparse.ArgumentParser(
         description='Monitor a directory and log changes to monitored files')
     p.add_argument("--dir", type=str,
-                    help="Directory to monitor", default=os.getcwd())
+                help="Directory to monitor", default=os.getcwd())
     p.add_argument("--ext", type=str,
-                    help="File extension filter", default="txt")
+                help="File extension filter", default="txt")
     p.add_argument("--int", type=int, help="Timeout interval", default=5)
     p.add_argument("magicStr", type=str, help="String to monitor for")
 
@@ -79,35 +71,54 @@ def signal_handler(sig_num, frame):
     :param frame: Not used
     :return None
     """
+    exit.set()
     global exit_flag
     exit_flag = True
-    logger = logging.getLogger("watcher")
     # log the associated signal name (the python3 way)
     print(str(sig_num))
-    logger.warning('Received ' + signal.Signals(sig_num).name)
+    logging.warning('Received ' + signal.Signals(sig_num).name)
     # log the signal name (the python2 way)
     signames = dict((k, v) for v, k in reversed(sorted(signal.__dict__.items()))
                     if v.startswith('SIG') and not v.startswith('SIG_'))
-    logger.warning('Received ' + signames[sig_num])
+    logging.warning('Received ' + signames[sig_num])
+
+
+def watch_dir(dir):
+    for path in os.listdir(dir):
+        path = f'{os.getcwd()}/{path}'
+        print(path)
+        find_files(path)
+        read_new_lines(path)
+
+
+def find_files(file):
+    if not file in filedict:
+        filedict[file] = {
+            "mod_date": os.stat(file)[8]
+        }
+
+def read_new_lines(file):
+    current_mod_date = os.stat(file)[8]
+    if not current_mod_date == filedict[file]['mod_date']:
+        with os.open(file, 'r') as f:
+            "byte_read_offset" in filedict.keys()
+
 
 
 def main():
-    polling_interval = 10
+    args = init_parser()
+    polling_interval = args.int
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGQUIT, signal_handler)
 
-    while not exit_flag:
+    while not exit.is_set():
         try:
-            print(exit_flag)
-            # call my directory watching function..
+            watch_dir(args.dir)
         except Exception as e:
-            print("bar")
-            # This is an UNHANDLED exception
-            # Log an ERROR level message here
+            logging.error(e)
 
-            # put a sleep inside my while loop so I don't peg the cpu usage at 100%
-        time.sleep(polling_interval)
+        exit.wait(polling_interval)
 
     # final exit point happens here
     # Log a message that we are shutting down
