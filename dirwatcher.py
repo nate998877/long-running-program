@@ -2,41 +2,37 @@
 import time
 from threading import Event
 import signal
-import asyncio
 import argparse
 import os
 import logging
 
 
-"""
-DONE: implement cmd line args {watchDir:dir, magicStr:str} (argparse)
-DONE: implement signal handling (signal)
-DONE: implement Timed loop to monitor watchDir (threading + time)
-DONE: implement file cacheing (dict)
-DONEish: implement logging
-TODO: implement graceful exit
-TODO: implement async dir searching (asyncio)
-TODO: implement logging for file remove/add/magic string
-"""
 
 
-exit_flag = False
-WAIT_TIME_SECONDS = 1
+
 filedict = {}
-exit = Event()
+exit_event = Event()
 logging.basicConfig(filename="watcher.log", level=logging.DEBUG,
                     format='[%(levelname)8s] [%(lineno)d]: %(asctime)s - %(message)s')
 
+logger = logging.getLogger(__name__)
 
+signames = dict((k, v) for v, k in reversed(sorted(signal.__dict__.items()))
+                if v.startswith('SIG') and not v.startswith('SIG_'))
 
 def init_parser():
+    """[summary]
+    
+    Returns:
+        [type] -- [description]
+    """
     p = argparse.ArgumentParser(
         description='Monitor a directory and log changes to monitored files')
     p.add_argument("--dir", type=str,
                 help="Absolute or relative directory to monitor. NO preceeding text on relative paths ex './'", default=os.getcwd())
     p.add_argument("--ext", type=str,
                 help="File extension to monitor ex .log .txt", default=".txt")
-    p.add_argument("--int", type=int, help="Timeout interval in seconds", default=5)
+    p.add_argument("--int", type=int, help="Timeout interval in seconds", default=1)
     p.add_argument("magicStr", type=str, help="String to log if discovered in monitored directory")
 
     return p.parse_args()
@@ -50,68 +46,95 @@ def signal_handler(sig_num, frame):
     :param frame: Not used
     :return None
     """
-    exit.set()
-    global exit_flag
-    exit_flag = True
     # log the associated signal name (the python3 way)
-    logging.warning('Received ' + signal.Signals(sig_num).name)
-    # log the signal name (the python2 way)
-    signames = dict((k, v) for v, k in reversed(sorted(signal.__dict__.items()))
-                    if v.startswith('SIG') and not v.startswith('SIG_'))
-    logging.warning('Received ' + signames[sig_num])
+    logger.warning('Received ' + signal.Signals(sig_num).name)
+    exit_event.set()
+    
 
 
 def watch_dir(args):
-    for file in os.listdir(args.dir):
-        if not os.path.isabs(file):
-            file = f'{os.getcwd()}/{args.dir}/{file}'
-        find_files(file)
-        read_new_lines(file, args)
+    """[summary]
+    
+    Arguments:
+        args {[type]} -- [description]
+    """
+    file_list = []
+    for file in os.listdir(os.getcwd()):
+        if file.endswith(args.ext):
+            file_list.append(file)
+            find_files(file)
+            read_new_lines(file, args)
+    new_arr = set(file_list).difference(filedict.keys())
+
 
 
 def find_files(file):
+    """[summary]
+    
+    Arguments:
+        file {[type]} -- [description]
+    """
     if not file in filedict:
+        logger.info(f"added file {file} to watch list")
         filedict[file] = {
             "mod_date": os.stat(file)[8],
             "first_read": True
         }
+    
 
 def read_new_lines(file, args):
-    print(filedict)
+    """[summary]
+    
+    Arguments:
+        file {[type]} -- [description]
+        args {[type]} -- [description]
+    """
     current_mod_date = os.stat(file)[8]
     if not current_mod_date == filedict[file]['mod_date'] or filedict[file]['first_read']:
         filedict[file]['first_read'] = False
         filedict[file]['mod_date']   = current_mod_date
-        print(file)
         with open(file, 'r') as f:
-            if "byte_read_offset" in filedict.keys():
+            line_no = 0
+            if 'byte_read_offset' in filedict[file].keys():
                 f.seek(filedict[file]["byte_read_offset"])
-            for line in f.readlines():
-                if args.magicStr in line:
-                    logging.debug(f"Magic string found in {file} at byte offset {f.tell()}") #I don't know how to convert byte offset to line #. I assume enumerate won't work
+            for i, line in enumerate(f.readlines()):
+                line_no = i
+                if args.magicStr in line and "line_no" in filedict[file].keys():
+                    logger.debug(f"Magic string found in {file} on line {filedict[file]['line_no']+i}")
+                elif args.magicStr in line:
+                    logger.debug(f"Magic string found in {file} on line {i+1}")
             filedict[file]["byte_read_offset"] = f.tell()
-            print(filedict, "two")
+            if "line_no" in filedict[file].keys():
+                filedict[file]["line_no"] += line_no
+            else:
+                filedict[file]["line_no"] = line_no
+
 
 def main():
+    """[summary]
+    """
     args = init_parser()
+    os.chdir(args.dir)
     polling_interval = args.int
     for sig in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
         signal.signal(sig, signal_handler)
 
-    logging.info(f"""
+    logger.info(f"""
 -----------------------------------------------
 Dirwatcher Started @ {time.strftime("%Y/%m/%d, %H:%M:%S - %Z", time.localtime(time.time()))}
 -----------------------------------------------""")
+    logger.info(f"Log started with watched Dir {args.dir} Timeout {args.int} magicStr {args.magicStr} and extension {args.ext}")
+    #TODO: log adding and removal of files
 
-    while not exit.is_set():
-        # try:
-        watch_dir(args)
-        # except Exception as e:
-        #     logging.error(e)
+    while not exit_event.is_set():
+        try:
+            watch_dir(args)
+        except Exception as e:
+            logger.error(e)
 
-        exit.wait(polling_interval)
+        exit_event.wait(polling_interval)
 
-    logging.info(f"""
+    logger.info(f"""
 ---------------------------------------------
 Dirwatcher Ended @ {time.strftime("%Y/%m/%d, %H:%M:%S - %Z", time.localtime(time.time()))}
 ---------------------------------------------""")
