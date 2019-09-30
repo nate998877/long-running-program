@@ -63,8 +63,8 @@ def watch_dir(args):
     if diff_set:
         for item in diff_set:
             del filedict[item]
-            logger.warn(f"{item} was deleted from {args.dir} and was removed from watch list")
-
+            logger.warn(
+                f"{item} was deleted from {args.dir} and was removed from watch list")
 
 
 def update_file_dict(file):
@@ -124,8 +124,10 @@ def main():
     for sig in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
         signal.signal(sig, signal_handler)
 
-    logger.info(f"""\n{"-"*47}\nDirwatcher Started @ {time.strftime('%Y/%m/%d, %H:%M:%S - %Z', time.localtime(time.time()))}\n{"-"*47}""")
-    logger.info(f"Log started with \x7B dir : '{args.dir}', timeout : {args.int}s, magicStr : '{args.magicStr}', extension : '{args.ext}' \x7D")
+    logger.info(
+        f"""\n{"-"*47}\nDirwatcher Started @ {time.strftime('%Y/%m/%d, %H:%M:%S - %Z', time.localtime(time.time()))}\n{"-"*47}""")
+    logger.info(
+        f"Log started with \x7B dir : '{args.dir}', timeout : {args.int}s, magicStr : '{args.magicStr}', extension : '{args.ext}' \x7D")
 
     while not exit_event.is_set():
         try:
@@ -137,7 +139,8 @@ def main():
 
         exit_event.wait(polling_interval)
 
-    logger.info(f"\n{'-'*45}\nDirwatcher Ended @ {time.strftime('%Y/%m/%d, %H:%M:%S - %Z', time.localtime(time.time()))}\n{'-'*45}")
+    logger.info(
+        f"\n{'-'*45}\nDirwatcher Ended @ {time.strftime('%Y/%m/%d, %H:%M:%S - %Z', time.localtime(time.time()))}\n{'-'*45}")
 
 
 if __name__ == "__main__":
